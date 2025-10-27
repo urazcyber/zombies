@@ -1,0 +1,140 @@
+using UnityEngine;
+using UnityEngine.AI;
+
+public class BattleRoyalePrototype : MonoBehaviour
+{
+    [Header("Player")]
+    public float playerSpeed = 5f;
+    public float runSpeed = 8f;
+    public Camera playerCam;
+    public int playerHealth = 100;
+
+    [Header("Weapon")]
+    public float damage = 20f;
+    public float range = 50f;
+    public int ammo = 30;
+    public ParticleSystem muzzleFlash;
+
+    [Header("Zombies")]
+    public GameObject[] zombies;
+    public float zombieLookRadius = 10f;
+
+    [Header("Loot")]
+    public GameObject[] lootItems;
+
+    private float xRotation = 0f;
+
+    void Update()
+    {
+        PlayerMove();
+        PlayerLook();
+        ShootWeapon();
+        ZombieBehavior();
+    }
+
+    void PlayerMove()
+    {
+        float x = Input.GetAxis("Horizontal");
+        float z = Input.GetAxis("Vertical");
+        Vector3 move = transform.right * x + transform.forward * z;
+        float speed = Input.GetKey(KeyCode.LeftShift) ? runSpeed : playerSpeed;
+        transform.position += move * speed * Time.deltaTime;
+    }
+
+    void PlayerLook()
+    {
+        float mouseX = Input.GetAxis("Mouse X");
+        float mouseY = Input.GetAxis("Mouse Y");
+
+        xRotation -= mouseY;
+        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+        playerCam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        transform.Rotate(Vector3.up * mouseX);
+    }
+
+    void ShootWeapon()
+    {
+        if(Input.GetButtonDown("Fire1") && ammo > 0)
+        {
+            muzzleFlash?.Play();
+            ammo--;
+
+            RaycastHit hit;
+            if(Physics.Raycast(playerCam.transform.position, playerCam.transform.forward, out hit, range))
+            {
+                // Zombiya vurma
+                if(hit.collider.CompareTag("Zombie"))
+                {
+                    ZombieHealth z = hit.collider.GetComponent<ZombieHealth>();
+                    if(z != null) z.TakeDamage(damage);
+                }
+            }
+        }
+    }
+
+    void ZombieBehavior()
+    {
+        foreach(GameObject z in zombies)
+        {
+            if(z == null) continue;
+            NavMeshAgent agent = z.GetComponent<NavMeshAgent>();
+            if(agent == null) continue;
+
+            float dist = Vector3.Distance(transform.position, z.transform.position);
+            if(dist <= zombieLookRadius)
+            {
+                agent.SetDestination(transform.position);
+            }
+        }
+    }
+
+    public void TakeDamage(int dmg)
+    {
+        playerHealth -= dmg;
+        if(playerHealth <= 0) PlayerDie();
+    }
+
+    void PlayerDie()
+    {
+        Debug.Log("Oyuncu öldü!");
+        // İstersen restart veya oyun sonu ekranı ekle
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if(other.CompareTag("Loot"))
+        {
+            LootItem loot = other.GetComponent<LootItem>();
+            if(loot != null) loot.Collect(this);
+        }
+    }
+}
+
+// Yardımcı sınıflar (loot ve zombi sağlık)
+[System.Serializable]
+public class ZombieHealth : MonoBehaviour
+{
+    public float health = 100f;
+
+    public void TakeDamage(float dmg)
+    {
+        health -= dmg;
+        if(health <= 0) Destroy(gameObject);
+    }
+}
+
+[System.Serializable]
+public class LootItem : MonoBehaviour
+{
+    public enum LootType { Health, Ammo }
+    public LootType lootType;
+    public int amount = 20;
+
+    public void Collect(BattleRoyalePrototype player)
+    {
+        if(lootType == LootType.Health) player.playerHealth += amount;
+        else if(lootType == LootType.Ammo) player.ammo += amount;
+
+        Destroy(gameObject);
+    }
+}
